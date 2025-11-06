@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ms-MY">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kemahiran Pemulihan: Operasi Tolak (Situasi Harian)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { box-sizing: border-box; }
+    .activity-card { min-height: 400px; }
+    .number-card { transition: all .3s ease; cursor: pointer; }
+    .number-card:hover { transform: scale(1.05); }
+    .dragging { opacity: .5; transform: rotate(5deg); }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #cbd5e1;
+      transition: all .3s ease;
+      min-width: 60px;
+      min-height: 60px;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .drop-zone.drag-over { border-color: #3b82f6; background-color: #eff6ff; }
+
+    /* Salah */
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+      100% { transform: translateX(0); }
+    }
+    .shake { animation: shake 0.5s ease; }
+
+    /* Zon sudah diisi */
+    .drop-zone-filled {
+      border-style: solid;
+      border-color: #4ade80;
+      background-color: #f0fdf4;
+    }
+
+    /* === GAYA KHAS UNTUK AKTIVITI 2 & 3 === */
+    .obj-bundle { /* Ikatan 10 */
+      background-color: #FBBF24; /* amber-400 */
+      border: 3px solid #F59E0B; /* amber-500 */
+      width: 60px; height: 80px;
+      border-radius: 8px;
+      text-align: center; font-size: 2em; font-weight: bold;
+      color: #92400E; /* amber-800 */
+      padding-top: 18px;
+      cursor: not-allowed;
+      display: inline-block; margin: 4px;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    }
+    .obj-single { /* Sebiji (Sa) */
+      background-color: #34D399; /* emerald-400 */
+      border: 3px solid #059669; /* emerald-600 */
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      text-align: center; font-size: 1.5em; font-weight: bold;
+      color: #064E3B; /* emerald-800 */
+      padding-top: 2px;
+      cursor: move;
+      display: inline-block; margin: 4px;
+      transition: all 0.2s ease;
+    }
+    .obj-single:hover { transform: scale(1.1); }
+    .obj-bundle.clickable { /* Ikatan 10 yg boleh dipecah */
+      cursor: pointer;
+      background-color: #F87171; /* red-400 */
+      border-color: #DC2626; /* red-600 */
+      color: #7F1D1D; /* red-800 */
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+    
+    #basket-zone {
+      min-height: 150px;
+      width: 100%;
+      border-radius: 10px;
+      padding: 10px;
+      display: flex; flex-wrap: wrap; align-content: flex-start;
+    }
+    #basket-zone .obj-single { cursor: not-allowed; } /* Tak boleh drag dari bakul */
+    
+    /* === GAYA KHAS UNTUK BENTUK LAZIM (TABLE) === */
+    .bentuk-lazim-table {
+      font-family: monospace;
+      font-size: 2.5rem; /* Saiz fon sama seperti kod anda */
+      line-height: 1.2;
+      border-collapse: collapse; /* Cantumkan border sel */
+      margin: 0 auto; /* Letak di tengah */
+      border-left: 2px solid #ccc;
+    }
+    .bentuk-lazim-table th, 
+    .bentuk-lazim-table td {
+      padding: 8px 12px;
+      text-align: center;
+      min-width: 60px; /* Pastikan sel ada lebar minimum */
+      position: relative; /* Penting untuk nombor pinjam */
+      height: 70px; /* Tetapkan ketinggian sel */
+    }
+    .bentuk-lazim-table th {
+      font-weight: bold;
+      border-bottom: 2px solid #ccc;
+      height: auto; /* Ketinggian auto untuk header */
+    }
+    /* Baris nombor penolak (cth: - 1 7) */
+    .bentuk-lazim-table tr.penolak td {
+      border-bottom: 3px solid #000; /* Garisan jawapan */
+    }
+    .col-pu {
+      border-right: 2px solid #ccc; /* Garisan pemisah Pu|Sa */
+    }
+    .ans-highlight {
+      background: #fef08a; /* Serlahkan jawapan */
+    }
+    .strike {
+      text-decoration: line-through; /* Garis potong */
+      color: #999;
+    }
+    .borrow-new {
+      position: absolute;
+      top: 0; /* Letak di atas sekali */
+      left: 50%; /* Letak di tengah sel */
+      transform: translateX(-50%);
+      font-size: 1.8rem; /* Saiz lebih kecil */
+      color: #DC2626; /* Merah */
+      font-weight: bold;
+      line-height: 1;
+    }
+    
+    /* === GAYA KHAS UNTUK AKTIVITI 5 === */
+    .input-bina {
+      font-size: 2rem; font-weight: bold; width: 100px;
+      text-align: center; border: 2px solid #ccc; border-radius: 8px;
+    }
+    
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-full">
+
+  <div class="bg-yellow-100 border-b-4 border-yellow-300 p-4 shadow-sm sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📚</span>
+        <span id="info-text" class="text-lg font-semibold text-gray-800">
+          Pilih aktiviti untuk mula belajar operasi tolak!
+        </span>
+      </div>
+      <button id="speak-btn"
+              class="bg-yellow-300 hover:bg-yellow-400 text-yellow-800 font-bold py-2 px-4 rounded-full text-xl transition-colors duration-200"
+              onclick="speakInfo()">
+        🔊
+      </button>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto p-6">
+    <div class="bg-white rounded-xl shadow-lg p-6 mb-6 activity-card flex items-center justify-center">
+      <div id="activity-content" class="text-center w-full">
+        <div class="py-16">
+          <div class="text-6xl mb-4">🥭</div>
+          <h2 class="text-3xl font-bold text-gray-800 mb-4">
+            Kemahiran Pemulihan: Operasi Tolak (Situasi Harian)
+          </h2>
+          <p class="text-xl text-gray-600 mb-8">
+            Jom fahamkan konsep tolak dan "kumpul semula" (pinjam) melalui cerita dan visual.
+          </p>
+          <div class="text-4xl">👇</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg p-6">
+      <h3 class="text-2xl font-bold text-gray-800 mb-4 text-center">Pilih Aktiviti</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <button onclick="loadActivity(1)"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors duration-200">
+          🎯 Fahamkan Cerita
+        </button>
+        <button onclick="loadActivity(2)"
+                class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors duration-200">
+          🍎 Tolak Mudah (Visual)
+        </button>
+        <button onclick="loadActivity(3)"
+                class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors duration-200">
+          🥭 Tolak 'Pinjam' (Visual)
+        </button>
+        <button onclick="loadActivity(4)"
+                class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors duration-200">
+          🔗 Konkrit ke Abstrak
+        </button>
+        <button onclick="loadActivity(5)"
+                class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg text-lg transition-colors duration-200">
+          ✍️ Bina Cerita Sendiri
+        </button>
+      </div>
+
+      <div class="flex justify-center gap-4">
+        <button onclick="clearActivity()" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg text-lg transition-colors duration-200">
+          🧹 Bersih
+        </button>
+        <button onclick="nextActivity()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg text-lg transition-colors duration-200">
+          ➡️ Seterusnya
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentActivity = 0;
+    let ttsEnabled = false;
+    let currentInfo = "Pilih aktiviti untuk mula belajar operasi tolak!";
+    let draggedElement = null;
+
+    // State untuk aktiviti
+    window.subtractionGames = {
+      activity2: { count: 0, target: 3 },
+      activity3: { count: 0, target: 15, bundles: 2 }
+    };
+
+    /* ====== TTS ====== */
+    function speak(text) {
+      if (!ttsEnabled) return;
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      setTimeout(() => {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'ms-MY';
+        u.rate = 0.9; u.pitch = 1.05;
+        const voices = window.speechSynthesis.getVoices();
+        const ms = voices.find(v => v.lang === 'ms-MY' || v.lang?.startsWith('ms'));
+        if (ms) u.voice = ms;
+        window.speechSynthesis.speak(u);
+      }, 100);
+    }
+    function setInfo(text) { currentInfo = text; document.getElementById('info-text').textContent = text; }
+    function speakInfo() {
+      if (!ttsEnabled) {
+        ttsEnabled = true;
+        const btn = document.getElementById('speak-btn');
+        btn.classList.add('bg-green-300', 'hover:bg-green-400');
+        btn.classList.remove('bg-yellow-300', 'hover:bg-yellow-400');
+      }
+      speak(currentInfo);
+    }
+
+    /* ====== DnD helpers ====== */
+    function dragStart(e) { draggedElement = e.target; e.target.classList.add('dragging'); }
+    function dragEnd(e) {
+      if (draggedElement) draggedElement.classList.remove('dragging');
+      document.querySelectorAll('.drop-zone').forEach(z=>z.classList.remove('drag-over'));
+    }
+    function allowDrop(e) { e.preventDefault(); if (e.currentTarget.classList.contains('drop-zone')) e.currentTarget.classList.add('drag-over'); }
+    function dragLeave(e) { if (e.currentTarget.classList.contains('drop-zone')) e.currentTarget.classList.remove('drag-over'); }
+
+    /* ====== Router ====== */
+    function loadActivity(n) {
+      currentActivity = n;
+      const content = document.getElementById('activity-content');
+      if (n === 1) return loadStoryComprehension(content);
+      if (n === 2) return loadSimpleSubtraction(content);
+      if (n === 3) return loadRegroupSubtraction(content);
+      if (n === 4) return loadAbstractLink(content);
+      if (n === 5) return loadStoryBuilder(content);
+    }
+
+    /* ====== Aktiviti 1: Fahamkan Cerita ====== */
+    function loadStoryComprehension(content) {
+      setInfo("Baca cerita. Seret nombor ke kotak yang betul.");
+      content.innerHTML = `
+        <h3 class="text-2xl font-bold text-blue-600 mb-6">🎯 Fahamkan Cerita</h3>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 text-xl text-gray-800 mb-6 text-left leading-relaxed">
+          "Di atas pokok mangga ada <strong>24</strong> biji buah mangga. <strong>15</strong> biji masih hijau dan yang lainnya sudah masak. Berapa biji buah mangga yang sudah masak?"
+          <br><br>
+          <span class="text-blue-600 font-semibold">Jawapan: <strong>9</strong> biji buah mangga yang sudah masak.</span>
+        </div>
+        
+        <div class="flex flex-wrap justify-center gap-4 mb-8">
+          <div class="number-card bg-blue-100 border-2 border-blue-300 rounded-lg p-4 text-3xl font-bold text-blue-800 cursor-move"
+               draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-number="24">
+            24
+          </div>
+          <div class="number-card bg-blue-100 border-2 border-blue-300 rounded-lg p-4 text-3xl font-bold text-blue-800 cursor-move"
+               draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-number="15">
+            15
+          </div>
+          <div class="number-card bg-blue-100 border-2 border-blue-300 rounded-lg p-4 text-3xl font-bold text-blue-800 cursor-move"
+               draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-number="9">
+            9
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4 text-left">
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <label class="font-semibold text-gray-700">Jumlah Semua Mangga:</label>
+            <div id="drop-jumlah" class="drop-zone rounded-lg p-6 mt-2 text-2xl font-bold text-center" 
+                 ondrop="dropOnStoryBox(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" data-correct="24">...</div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <label class="font-semibold text-gray-700">Mangga Hijau (Ditolak):</label>
+            <div id="drop-tolak" class="drop-zone rounded-lg p-6 mt-2 text-2xl font-bold text-center" 
+                 ondrop="dropOnStoryBox(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" data-correct="15">...</div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <label class="font-semibold text-gray-700">Mangga Masak (Baki):</label>
+            <div id="drop-baki" class="drop-zone rounded-lg p-6 mt-2 text-2xl font-bold text-center" 
+                 ondrop="dropOnStoryBox(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" data-correct="9">...</div>
+          </div>
+        </div>
+      `;
+    }
+    function dropOnStoryBox(e) {
+      e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+      if (!draggedElement) return;
+      const draggedNumber = draggedElement.dataset.number;
+      const correctNumber = e.currentTarget.dataset.correct;
+      
+      if (draggedNumber === correctNumber) {
+        e.currentTarget.innerHTML = draggedNumber;
+        e.currentTarget.classList.add('drop-zone-filled');
+        e.currentTarget.classList.remove('drop-zone');
+        e.currentTarget.removeAttribute('ondrop');
+        draggedElement.remove(); draggedElement = null;
+        const msg = `Betul! ${draggedNumber} diletak di tempat yang betul.`; setInfo(msg); speak(msg);
+        if (document.querySelectorAll('#activity-content .drop-zone').length === 0) {
+          setInfo("Syabas! Anda faham semua bahagian cerita ini."); speak("Syabas! Anda faham semua bahagian cerita ini.");
+        }
+      } else {
+        setInfo(`Bukan di situ. Cuba lagi.`); speak(`Bukan di situ. Cuba lagi.`);
+        e.currentTarget.classList.add('shake'); setTimeout(()=>e.currentTarget.classList.remove('shake'),500);
+      }
+    }
+
+    /* ====== Aktiviti 2: Tolak Mudah (Visual) ====== */
+    function loadSimpleSubtraction(content) {
+      setInfo("Jom tolak $24 - 3$. Seret 3 biji epal ke dalam bakul.");
+      // Reset state semasa muat
+      window.subtractionGames.activity2 = { count: 0, target: 3 };
+      content.innerHTML = `
+        <h3 class="text-2xl font-bold text-green-600 mb-6">🍎 Tolak Mudah (Visual): 24 - 3</h3>
+        <div class="mb-4">
+          <h4 class="text-lg font-semibold mb-2">Objek (24):</h4>
+          <div id="obj-container" class="bg-gray-100 p-4 rounded-lg min-h-24">
+            <div class="obj-bundle">10</div>
+            <div class="obj-bundle">10</div>
+            <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+            <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+            <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+            <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+          </div>
+        </div>
+        <div>
+          <h4 class="text-lg font-semibold mb-2">Bakul (Seret ke sini):</h4>
+          <div id="basket-zone" class="drop-zone" ondrop="dropOnBasket(event, 2)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        </div>
+      `;
+    }
+
+    /* ====== FUNGSI dropOnBasket (DIKEMAS KINI) ====== */
+    function dropOnBasket(e, activityNum) {
+      e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+
+      let state, target, msg;
+
+      // 1. Tentukan state & target berdasarkan aktiviti
+      if (activityNum === 2) {
+        state = window.subtractionGames.activity2;
+        target = state.target;
+      } else if (activityNum === 3) {
+        state = window.subtractionGames.activity3;
+        target = state.target;
+      }
+
+      // 2. (PEMBETULAN) Semak jika bakul SUDAH penuh
+      if (state.count >= target) {
+        setInfo(`Bakul sudah penuh dengan ${target} biji.`);
+        speak(`Bakul sudah penuh.`);
+        return; // Hentikan fungsi serta-merta
+      }
+
+      // 3. Semak jika objek yang diseret itu sah
+      if (!draggedElement || draggedElement.dataset.type !== 'sa') {
+        if (draggedElement) {
+          setInfo("Guna biji (sa) dahulu. Ikatan (puluh) belum perlu dipecah.");
+          speak("Guna biji (sa) dahulu. Ikatan (puluh) belum perlu dipecah.");
+          draggedElement.classList.add('shake');
+          setTimeout(()=>draggedElement.classList.remove('shake'),500);
+        }
+        return;
+      }
+      
+      // 4. Proses objek
+      state.count++;
+      draggedElement.remove(); draggedElement = null;
+      e.currentTarget.appendChild(createStaticCopy(state.count)); // Cipta salinan statik
+
+      // 5. Beri maklum balas dan semak jika selesai
+      if (activityNum === 2) {
+        msg = `Bagus! ${state.count} dari ${target} biji telah diasingkan.`;
+        if (state.count === target) {
+          msg = `Syabas! ${target} biji telah diasingkan. Baki ialah 21.`;
+          
+          // (PEMBETULAN) Lumpuhkan (disable) drop zone dan objek
+          const basket = e.currentTarget;
+          basket.removeAttribute('ondrop');
+          basket.removeAttribute('ondragover');
+          basket.removeAttribute('ondragleave');
+          basket.classList.remove('drop-zone');
+          
+          document.querySelectorAll('#obj-container .obj-single[draggable="true"]')
+            .forEach(item => {
+                item.setAttribute('draggable', 'false');
+                item.style.cursor = 'not-allowed';
+            });
+        }
+      } else if (activityNum === 3) {
+        msg = `Bagus! ${state.count} dari ${target} biji telah diasingkan.`;
+        
+        if (state.count === 4 && state.bundles === 2) {
+          msg = `OK, ${state.count} biji dah masuk. Tapi tak cukup! Kita perlu pecahkan ikatan 10. Klik ikatan merah.`;
+          document.querySelectorAll('#obj-container .obj-bundle').forEach(b => b.classList.add('clickable'));
+        }
+        
+        if (state.count === target) {
+          msg = `Syabas! ${target} biji telah diasingkan. Baki ialah 9.`;
+          
+          // (PEMBETULAN) Lumpuhkan (disable) drop zone dan objek
+          const basket = e.currentTarget;
+          basket.removeAttribute('ondrop');
+          basket.removeAttribute('ondragover');
+          basket.removeAttribute('ondragleave');
+          basket.classList.remove('drop-zone');
+
+          document.querySelectorAll('#obj-container .obj-single[draggable="true"]')
+            .forEach(item => {
+                item.setAttribute('draggable', 'false');
+                item.style.cursor = 'not-allowed';
+            });
+          document.querySelectorAll('#obj-container .obj-bundle')
+            .forEach(bundle => {
+                bundle.classList.remove('clickable');
+                bundle.removeAttribute('onclick');
+            });
+        }
+      }
+      
+      setInfo(msg); speak(msg);
+    }
+
+    function createStaticCopy(num) {
+        const div = document.createElement('div');
+        div.className = 'obj-single';
+        div.style.cursor = 'not-allowed';
+        div.innerText = '1'; // atau num jika mahu kira
+        return div;
+    }
+
+    /* ====== Aktiviti 3: Tolak 'Pinjam' (Visual) ====== */
+    function loadRegroupSubtraction(content) {
+      setInfo("Jom tolak $24 - 15$. Seret 15 biji mangga ke dalam bakul.");
+      // Reset state semasa muat
+      window.subtractionGames.activity3 = { count: 0, target: 15, bundles: 2 };
+      content.innerHTML = `
+        <h3 class="text-2xl font-bold text-purple-600 mb-6">🥭 Tolak 'Pinjam' (Visual): 24 - 15</h3>
+        <div class="mb-4">
+          <h4 class="text-lg font-semibold mb-2">Objek (24):</h4>
+          <div id="obj-container" class="bg-gray-100 p-4 rounded-lg min-h-24">
+            <div class="obj-bundle" onclick="pecahIkatan(event, this)">10</div>
+            <div class="obj-bundle" onclick="pecahIkatan(event, this)">10</div>
+            <div id="sa-container" class="inline">
+              <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+              <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+              <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+              <div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h4 class="text-lg font-semibold mb-2">Bakul (Seret ke sini):</h4>
+          <div id="basket-zone" class="drop-zone" ondrop="dropOnBasket(event, 3)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        </div>
+      `;
+    }
+    
+    function pecahIkatan(e, bundleElement) {
+      let state = window.subtractionGames.activity3;
+      // Jangan benarkan pecah jika target dah capai
+      if (state.count >= state.target) return; 
+
+      if (document.querySelectorAll('#sa-container .obj-single').length > 0) {
+        const msg = "Gunakan biji (sa) dahulu sebelum pecah ikatan.";
+        setInfo(msg); speak(msg);
+        bundleElement.classList.add('shake');
+        setTimeout(()=>bundleElement.classList.remove('shake'),500);
+        return;
+      }
+      
+      if (state.bundles > 0) {
+        state.bundles--;
+        bundleElement.remove();
+        
+        const saContainer = document.getElementById('sa-container');
+        let newSaHTML = '';
+        for(let i=0; i<10; i++) {
+          newSaHTML += `<div class="obj-single" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" data-type="sa">1</div>`;
+        }
+        saContainer.innerHTML += newSaHTML;
+        
+        const msg = "Bagus! Satu ikatan 10 telah dipecahkan. Sekarang anda ada 10 biji baru. Teruskan mengasingkan.";
+        setInfo(msg); speak(msg);
+      }
+    }
+
+    /* ====== Aktiviti 4: Konkrit ke Abstrak ====== */
+    function loadAbstractLink(content) {
+      setInfo("Lihat kaitan antara model visual dan bentuk lazim. Klik butang.");
+      content.innerHTML = `
+        <h3 class="text-2xl font-bold text-orange-600 mb-6">🔗 Konkrit ke Abstrak</h3>
+        <div class="grid md:grid-cols-2 gap-6 items-center">
+          
+          <div class="text-center bg-gray-50 p-4 rounded-lg">
+            <h4 class="text-lg font-semibold mb-3">Model Visual</h4>
+            <div id="abs-model" class="min-h-32">
+              <div class="obj-bundle">10</div>
+              <div class="obj-bundle">10</div>
+              <div class="obj-single">1</div>
+              <div class="obj-single">1</div>
+              <div class="obj-single">1</div>
+              <div class="obj-single">1</div>
+            </div>
+          </div>
+          
+          <div class="text-center">
+            <h4 class="text-lg font-semibold mb-3">Bentuk Lazim</h4>
+            <table id="abs-lazim-table" class="bentuk-lazim-table">
+              <thead>
+                <tr>
+                  <th class="col-pu">Pu</th>
+                  <th>Sa</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr id="abs-row-1">
+                  <td class="col-pu">2</td>
+                  <td>4</td>
+                </tr>
+                <tr id="abs-row-2" class="penolak">
+                  <td class="col-pu">- 1</td>
+                  <td>5</td>
+                </tr>
+                <tr id="abs-row-3">
+                  <td class="col-pu"></td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="text-center mt-6">
+          <button id="abs-step1" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-lg text-lg" onclick="runAbstractStep(1)">
+            Langkah 1: Kumpul Semula ('Pinjam')
+          </button>
+          <button id="abs-step2" class="bg-gray-400 text-white font-bold py-3 px-6 rounded-lg text-lg" disabled onclick="runAbstractStep(2)">
+            Langkah 2: Selesaikan
+          </button>
+        </div>
+      `;
+    }
+    function runAbstractStep(step) {
+      if (step === 1) {
+        document.getElementById('abs-model').innerHTML = `
+          <div class="obj-bundle">10</div>
+          <div class="obj-bundle clickable" style="opacity: 0.5;">10</div>
+          ${'<div class="obj-single">1</div>'.repeat(14)}
+        `;
+        
+        const row1 = document.getElementById('abs-row-1');
+        row1.cells[0].innerHTML = '<span class="borrow-new">1</span><span class="strike">2</span>';
+        row1.cells[1].innerHTML = '<span class="borrow-new">14</span><span class="strike">4</span>';
+
+        const msg = "Lihat! 'Pecah ikatan 10' sama dengan 'pinjam 1 dari puluh'. Nombor 2 jadi 1, nombor 4 jadi 14.";
+        setInfo(msg); speak(msg);
+        
+        document.getElementById('abs-step1').disabled = true;
+        const step2Btn = document.getElementById('abs-step2');
+        step2Btn.disabled = false;
+        step2Btn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+        step2Btn.classList.remove('bg-gray-400');
+      }
+      if (step === 2) {
+        const row3 = document.getElementById('abs-row-3');
+        row3.cells[0].innerHTML = '0';
+        row3.cells[1].innerHTML = '9';
+        row3.cells[1].classList.add('ans-highlight');
+        
+        const msg = "Rumah Sa: $14 - 5 = 9$. Rumah Pu: $1 - 1 = 0$. Jadi, $24 - 15 = 9$.";
+        setInfo(msg); speak(msg);
+        document.getElementById('abs-step2').disabled = true;
+      }
+    }
+
+    /* ====== Aktiviti 5: Bina Cerita Sendiri ====== */
+    function loadStoryBuilder(content) {
+      setInfo("Cuba masukkan nombor anda sendiri dan lihat cara ia diselesaikan.");
+      content.innerHTML = `
+        <h3 class="text-2xl font-bold text-red-600 mb-6">✍️ Bina Cerita Sendiri</h3>
+        <div class="text-2xl text-gray-800 leading-relaxed mb-6">
+          Saya ada 
+          <input type="number" id="bina-num1" class="input-bina" value="32" min="10" max="99"> 
+          biji epal.
+          <br>
+          Saya beri kawan 
+          <input type="number" id="bina-num2" class="input-bina" value="17" min="1" max="99"> 
+          biji.
+        </div>
+        <button class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg text-lg" onclick="janaCerita()">
+          Berapa bakinya? (Selesaikan)
+        </button>
+        <div id="bina-hasil" class="mt-6"></div>
+      `;
+    }
+    function janaCerita() {
+      const num1 = parseInt(document.getElementById('bina-num1').value);
+      const num2 = parseInt(document.getElementById('bina-num2').value);
+      const hasilEl = document.getElementById('bina-hasil');
+      
+      if (isNaN(num1) || isNaN(num2) || num1 < 10 || num2 < 1) {
+        hasilEl.innerHTML = `<p class="text-red-600 font-semibold">Sila masukkan nombor yang sah.</p>`;
+        return;
+      }
+      if (num1 <= num2) {
+        hasilEl.innerHTML = `<p class="text-red-600 font-semibold">Nombor pertama mesti lebih besar dari nombor kedua.</p>`;
+        return;
+      }
+      
+      const ans = num1 - num2;
+      const n1_pu = Math.floor(num1 / 10);
+      const n1_sa = num1 % 10;
+      const n2_pu = Math.floor(num2 / 10);
+      const n2_sa = num2 % 10;
+      const ans_pu = Math.floor(ans / 10);
+      const ans_sa = ans % 10;
+      
+      let lazimHTML = '';
+      const tableHeader = `
+        <thead>
+          <tr>
+            <th class="col-pu">Pu</th>
+            <th>Sa</th>
+          </tr>
+        </thead>
+      `;
+      
+      if (n1_sa < n2_sa) {
+        lazimHTML = `
+          ${tableHeader}
+          <tbody>
+            <tr>
+              <td class="col-pu"><span class="borrow-new">${n1_pu - 1}</span><span class="strike">${n1_pu}</span></td>
+              <td><span class="borrow-new">${n1_sa + 10}</span><span class="strike">${n1_sa}</span></td>
+            </tr>
+            <tr class="penolak">
+              <td class="col-pu">- ${n2_pu}</td>
+              <td>${n2_sa}</td>
+            </tr>
+            <tr>
+              <td class="col-pu">${ans_pu}</td>
+              <td class="ans-highlight">${ans_sa}</td>
+            </tr>
+          </tbody>
+        `;
+        const msg = `Kerana ${n1_sa} tidak boleh tolak ${n2_sa}, kita kumpul semula. Jawapannya ${ans}.`;
+        setInfo(msg); speak(msg);
+      } else {
+        lazimHTML = `
+          ${tableHeader}
+          <tbody>
+            <tr>
+              <td class="col-pu">${n1_pu}</td>
+              <td>${n1_sa}</td>
+            </tr>
+            <tr class="penolak">
+              <td class="col-pu">- ${n2_pu}</td>
+              <td>${n2_sa}</td>
+            </tr>
+            <tr>
+              <td class="col-pu">${ans_pu}</td>
+              <td class="ans-highlight">${ans_sa}</td>
+            </tr>
+          </tbody>
+        `;
+        const msg = `Ini tolak terus. Jawapannya ${ans}.`;
+        setInfo(msg); speak(msg);
+      }
+      
+      hasilEl.innerHTML = `
+        <h4 class="text-lg font-semibold mb-3">Penyelesaian untuk ${num1} - ${num2}:</h4>
+        <table class="bentuk-lazim-table bg-gray-50">
+          ${lazimHTML}
+        </table>
+        <p class="text-3xl font-bold mt-4">Jawapan: ${ans}</p>
+      `;
+    }
+
+    /* ====== Kawalan Umum ====== */
+    function clearActivity() {
+      currentActivity = 0;
+      document.getElementById('activity-content').innerHTML = `
+        <div class="text-center py-16">
+          <div class="text-6xl mb-4">🥭</div>
+          <h2 class="text-3xl font-bold text-gray-800 mb-4">Kemahiran Pemulihan: Operasi Tolak (Situasi Harian)</h2>
+          <p class="text-xl text-gray-600 mb-8">Jom fahamkan konsep tolak dan "kumpul semula" (pinjam) melalui cerita dan visual.</p>
+          <div class="text-4xl">👇</div>
+        </div>
+      `;
+      setInfo("Pilih aktiviti untuk mula belajar operasi tolak!");
+    }
+    function nextActivity() {
+      if (currentActivity === 0) return loadActivity(1);
+      if (currentActivity < 5) return loadActivity(currentActivity + 1);
+      return loadActivity(1);
+    }
+
+    // Kekalkan TTS resume pada sesetengah pelayar
+    if ('speechSynthesis' in window) {
+      setInterval(() => { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); }, 1000);
+    }
+  </script>
+</body>
+</html>
